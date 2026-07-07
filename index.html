@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSC 郵輪比價儀表板</title>
+<style>
+  :root {
+    --bg: #0a1628;
+    --bg2: #0f2038;
+    --card: rgba(255,255,255,0.06);
+    --card-border: rgba(255,255,255,0.10);
+    --text: #e8eef6;
+    --muted: #8fa3bf;
+    --gold: #ffd166;
+    --teal: #4ecdc4;
+    --green: #57cc99;
+    --red: #ff6b6b;
+    --blue: #4ea8de;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: "Microsoft JhengHei", -apple-system, "PingFang TC", sans-serif;
+    background: linear-gradient(160deg, var(--bg) 0%, var(--bg2) 55%, #142a45 100%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  /* ===== 頁首 ===== */
+  header { text-align: center; padding: 18px 0 6px; animation: fadeDown .6s ease both; }
+  header h1 {
+    font-size: clamp(22px, 5vw, 32px);
+    letter-spacing: 2px;
+    display: inline-flex; align-items: center; gap: 12px;
+  }
+  header h1 .ttl {
+    background: linear-gradient(90deg, var(--gold), var(--teal));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header h1 svg { flex-shrink: 0; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35)); }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
+
+  /* ===== 統計卡 ===== */
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px; margin: 18px 0;
+  }
+  .stat {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: 16px; padding: 16px 14px; text-align: center;
+    animation: fadeUp .6s ease both;
+    transition: transform .25s ease, border-color .25s ease;
+  }
+  .stat:hover { transform: translateY(-4px); border-color: var(--gold); }
+  .stat .num { font-size: clamp(20px, 4vw, 28px); font-weight: 700; color: var(--gold); }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .stat:nth-child(2) .num { color: var(--teal); }
+  .stat:nth-child(3) .num { color: var(--green); }
+
+  /* ===== 失敗提示 ===== */
+  .failed {
+    background: rgba(255,107,107,0.10); border: 1px solid rgba(255,107,107,0.35);
+    border-radius: 14px; padding: 12px 16px; margin-bottom: 16px;
+    font-size: 13px; line-height: 1.7; animation: fadeUp .6s .1s ease both;
+  }
+  .failed b { color: var(--red); }
+
+  /* ===== 港口分頁 ===== */
+  .tabs {
+    display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 10px;
+    position: sticky; top: 0; z-index: 10;
+    background: linear-gradient(180deg, var(--bg) 70%, transparent);
+    animation: fadeUp .6s .15s ease both;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex-shrink: 0; padding: 10px 20px; border-radius: 24px;
+    background: var(--card); border: 1px solid var(--card-border);
+    color: var(--muted); font-size: 14px; cursor: pointer;
+    transition: all .3s ease; user-select: none;
+  }
+  .tab:hover { color: var(--text); border-color: var(--teal); }
+  .tab.active {
+    background: linear-gradient(90deg, rgba(255,209,102,.18), rgba(78,205,196,.18));
+    border-color: var(--gold); color: var(--gold); font-weight: 700;
+    transform: scale(1.05);
+  }
+  .tab .cnt { font-size: 11px; opacity: .75; margin-left: 4px; }
+
+  /* ===== 排序控制 ===== */
+  .controls { display: flex; gap: 8px; margin: 4px 0 14px; flex-wrap: wrap; animation: fadeUp .6s .2s ease both; }
+  .sortbtn {
+    padding: 7px 14px; border-radius: 18px; font-size: 12px; cursor: pointer;
+    background: transparent; border: 1px solid var(--card-border); color: var(--muted);
+    transition: all .25s ease;
+  }
+  .sortbtn.active { border-color: var(--teal); color: var(--teal); background: rgba(78,205,196,.10); }
+
+  /* ===== 行程卡片 ===== */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+  .cruise {
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: 18px; padding: 18px;
+    opacity: 0; transform: translateY(24px);
+    transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
+    cursor: pointer;
+  }
+  .cruise.show { animation: cardIn .55s ease forwards; }
+  .cruise:hover { border-color: var(--teal); box-shadow: 0 8px 28px rgba(78,205,196,.15); }
+
+  .cruise .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .port-badge {
+    font-size: 11px; padding: 4px 10px; border-radius: 12px; white-space: nowrap;
+    background: rgba(78,168,222,.15); color: var(--blue); border: 1px solid rgba(78,168,222,.3);
+  }
+  .port-badge.taiwan { background: rgba(255,209,102,.15); color: var(--gold); border-color: rgba(255,209,102,.35); }
+  .cruise h3 { font-size: 16px; margin: 10px 0 2px; }
+  .cruise .date { font-size: 12px; color: var(--muted); }
+
+  .best {
+    display: flex; align-items: baseline; gap: 8px; margin: 12px 0 4px; flex-wrap: wrap;
+  }
+  .best .price { font-size: clamp(22px, 5vw, 26px); font-weight: 800; color: var(--green); }
+  .best .who { font-size: 13px; color: var(--muted); }
+  .save-badge {
+    font-size: 11px; padding: 3px 8px; border-radius: 10px;
+    background: rgba(87,204,153,.15); color: var(--green); border: 1px solid rgba(87,204,153,.3);
+  }
+
+  /* 國家比價列 */
+  .offers { margin-top: 10px; display: grid; gap: 8px; }
+  .offer { position: relative; border-radius: 12px; overflow: hidden; background: rgba(255,255,255,.04); }
+  .offer .bar {
+    position: absolute; inset: 0; width: 0;
+    background: linear-gradient(90deg, rgba(78,205,196,.16), rgba(78,205,196,.04));
+    transition: width .9s cubic-bezier(.25,.8,.35,1);
+  }
+  .offer.cheapest .bar { background: linear-gradient(90deg, rgba(87,204,153,.25), rgba(87,204,153,.05)); }
+  .offer .row {
+    position: relative; display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 12px; font-size: 13px; gap: 6px;
+  }
+  .offer .country { display: flex; align-items: center; gap: 6px; }
+  .offer .flag { font-size: 16px; }
+  .offer .twd { font-weight: 700; }
+  .offer.cheapest .twd { color: var(--green); }
+  .offer .orig { color: var(--muted); font-size: 11px; margin-left: 6px; }
+  .offer .diff { font-size: 11px; color: var(--red); }
+  .offer .star { color: var(--gold); margin-right: 2px; }
+
+  .gobook {
+    display: none; margin-top: 12px; gap: 8px; flex-wrap: wrap;
+  }
+  .cruise.open .gobook { display: flex; animation: fadeUp .3s ease both; }
+  .gobook a {
+    flex: 1; min-width: 120px; text-align: center; text-decoration: none;
+    padding: 10px; border-radius: 12px; font-size: 13px;
+    background: linear-gradient(90deg, rgba(255,209,102,.16), rgba(78,205,196,.16));
+    border: 1px solid var(--gold); color: var(--gold);
+    transition: all .25s ease;
+  }
+  .gobook a:hover { background: rgba(255,209,102,.25); transform: translateY(-2px); }
+  .hint { text-align: center; font-size: 11px; color: var(--muted); margin-top: 10px; }
+
+  .empty { text-align: center; color: var(--muted); padding: 60px 0; font-size: 14px; }
+  footer { text-align: center; color: var(--muted); font-size: 11px; margin: 30px 0 10px; }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+  @keyframes fadeDown { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+  @keyframes cardIn { to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>
+      <svg width="40" height="40" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="郵輪">
+        <path d="M5 30 L43 30 L38 41 Q37 43 34 43 L14 43 Q11 43 10 41 Z" fill="#4ea8de"/>
+        <path d="M8 30 L8 22 Q8 20 10 20 L30 20 L38 30 Z" fill="#e8eef6"/>
+        <rect x="14" y="10" width="16" height="11" rx="1.5" fill="#ffd166"/>
+        <rect x="17.5" y="13.5" width="3.5" height="3.5" rx="0.6" fill="#0a1628"/>
+        <rect x="23" y="13.5" width="3.5" height="3.5" rx="0.6" fill="#0a1628"/>
+        <path d="M24 3 L24 10" stroke="#ffd166" stroke-width="2" stroke-linecap="round"/>
+        <path d="M24 4 L31 7 L24 8 Z" fill="#ff6b6b"/>
+        <path d="M6 34 Q10 31 14 34 T22 34 T30 34 T38 34 T42 34" stroke="#4ecdc4" stroke-width="1.8" fill="none" opacity="0.8"/>
+      </svg>
+      <span class="ttl">MSC 郵輪比價儀表板</span>
+    </h1>
+    <div class="sub" id="meta"></div>
+  </header>
+
+  <div class="stats" id="stats"></div>
+  <div class="failed" id="failedBox" style="display:none;"></div>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="controls">
+    <button class="sortbtn active" data-sort="date">依出發日期</button>
+    <button class="sortbtn" data-sort="price">依最低價格</button>
+    <button class="sortbtn" data-sort="save">依省最多</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none;">此出發地目前沒有抓到航次資料</div>
+
+  <footer>價格為各官網「每人起價」（含稅費），實際以官網結帳為準。點擊卡片可展開訂購連結。</footer>
+</div>
+
+<script>
+const DATA = {"generated_at": "2026-07-07T09:46:19.162532+00:00", "groups": [{"departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-11-25", "sail_date": "2026-11-25", "offers": [{"country_key": "uk", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-11-25", "sail_date": "2026-11-25", "price_original": 395.0, "currency": "GBP", "price_twd": 16896.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-11-25", "sail_date": "2026-11-25", "price_original": 487.0, "currency": "EUR", "price_twd": 17819.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "usa", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-11-25", "sail_date": "2026-11-25", "price_original": 579.0, "currency": "USD", "price_twd": 18574.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-11-25", "sail_date": "2026-11-25", "price_original": 589.0, "currency": "EUR", "price_twd": 21551.0, "source_url": "https://www.msccruises.at/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "uk"}, {"departure_port": "taiwan", "itinerary_name": "5晚 來回 2026-11-29", "sail_date": "2026-11-29", "offers": [{"country_key": "usa", "departure_port": "taiwan", "itinerary_name": "5晚 來回 2026-11-29", "sail_date": "2026-11-29", "price_original": 622.0, "currency": "USD", "price_twd": 19953.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "taiwan", "itinerary_name": "5晚 來回 2026-11-29", "sail_date": "2026-11-29", "price_original": 574.0, "currency": "EUR", "price_twd": 21002.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "taiwan", "itinerary_name": "5晚 來回 2026-11-29", "sail_date": "2026-11-29", "price_original": 649.0, "currency": "EUR", "price_twd": 23746.0, "source_url": "https://www.msccruises.at/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "taiwan", "itinerary_name": "5晚 來回 2026-11-29", "sail_date": "2026-11-29", "price_original": 599.0, "currency": "GBP", "price_twd": 25623.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-12-04", "sail_date": "2026-12-04", "offers": [{"country_key": "belgium", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-12-04", "sail_date": "2026-12-04", "price_original": 427.0, "currency": "EUR", "price_twd": 15623.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-12-04", "sail_date": "2026-12-04", "price_original": 530.0, "currency": "EUR", "price_twd": 19392.0, "source_url": "https://www.msccruises.at/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-12-04", "sail_date": "2026-12-04", "price_original": 479.0, "currency": "GBP", "price_twd": 20490.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "belgium"}, {"departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-12-20", "sail_date": "2026-12-20", "offers": [{"country_key": "usa", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2026-12-20", "sail_date": "2026-12-20", "price_original": 506.0, "currency": "USD", "price_twd": 16232.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "taiwan", "itinerary_name": "4晚 來回 2027-01-05", "sail_date": "2027-01-05", "offers": [{"country_key": "belgium", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2027-01-05", "sail_date": "2027-01-05", "price_original": 437.0, "currency": "EUR", "price_twd": 15989.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "usa", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2027-01-05", "sail_date": "2027-01-05", "price_original": 557.0, "currency": "USD", "price_twd": 17868.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2027-01-05", "sail_date": "2027-01-05", "price_original": 569.0, "currency": "EUR", "price_twd": 20819.0, "source_url": "https://www.msccruises.at/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "taiwan", "itinerary_name": "4晚 來回 2027-01-05", "sail_date": "2027-01-05", "price_original": 509.0, "currency": "GBP", "price_twd": 21773.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "belgium"}, {"departure_port": "taiwan", "itinerary_name": "4晚 單程→Tokyo 2027-01-13", "sail_date": "2027-01-13", "offers": [{"country_key": "usa", "departure_port": "taiwan", "itinerary_name": "4晚 單程→Tokyo 2027-01-13", "sail_date": "2027-01-13", "price_original": 389.0, "currency": "USD", "price_twd": 12479.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "taiwan", "itinerary_name": "4晚 單程→Tokyo 2027-01-13", "sail_date": "2027-01-13", "price_original": 357.0, "currency": "EUR", "price_twd": 13062.0, "source_url": "https://www.msccruises.at/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "taiwan", "itinerary_name": "4晚 單程→Tokyo 2027-01-13", "sail_date": "2027-01-13", "price_original": 357.0, "currency": "EUR", "price_twd": 13062.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "taiwan", "itinerary_name": "4晚 單程→Tokyo 2027-01-13", "sail_date": "2027-01-13", "price_original": 321.0, "currency": "GBP", "price_twd": 13731.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "taiwan", "itinerary_name": "7晚 單程→Shanghai 2027-01-13", "sail_date": "2027-01-13", "offers": [{"country_key": "usa", "departure_port": "taiwan", "itinerary_name": "7晚 單程→Shanghai 2027-01-13", "sail_date": "2027-01-13", "price_original": 639.0, "currency": "USD", "price_twd": 20498.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "taiwan", "itinerary_name": "7晚 單程→Shanghai 2027-01-13", "sail_date": "2027-01-13", "price_original": 613.0, "currency": "EUR", "price_twd": 22429.0, "source_url": "https://www.msccruises.at/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "taiwan", "itinerary_name": "7晚 單程→Shanghai 2027-01-13", "sail_date": "2027-01-13", "price_original": 613.0, "currency": "EUR", "price_twd": 22429.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "taiwan", "itinerary_name": "7晚 單程→Shanghai 2027-01-13", "sail_date": "2027-01-13", "price_original": 555.0, "currency": "GBP", "price_twd": 23740.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=KEE&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "okinawa", "itinerary_name": "5晚 來回 2026-11-27", "sail_date": "2026-11-27", "offers": [{"country_key": "usa", "departure_port": "okinawa", "itinerary_name": "5晚 來回 2026-11-27", "sail_date": "2026-11-27", "price_original": 649.0, "currency": "USD", "price_twd": 20819.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "okinawa", "itinerary_name": "5晚 來回 2026-11-27", "sail_date": "2026-11-27", "price_original": 584.0, "currency": "EUR", "price_twd": 21368.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "okinawa", "itinerary_name": "5晚 來回 2026-11-27", "sail_date": "2026-11-27", "price_original": 519.0, "currency": "GBP", "price_twd": 22201.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "okinawa", "itinerary_name": "4晚 來回 2026-12-02", "sail_date": "2026-12-02", "offers": [{"country_key": "belgium", "departure_port": "okinawa", "itinerary_name": "4晚 來回 2026-12-02", "sail_date": "2026-12-02", "price_original": 417.0, "currency": "EUR", "price_twd": 15258.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "okinawa", "itinerary_name": "4晚 來回 2026-12-02", "sail_date": "2026-12-02", "price_original": 429.0, "currency": "GBP", "price_twd": 18351.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "belgium"}, {"departure_port": "okinawa", "itinerary_name": "4晚 來回 2027-01-03", "sail_date": "2027-01-03", "offers": [{"country_key": "usa", "departure_port": "okinawa", "itinerary_name": "4晚 來回 2027-01-03", "sail_date": "2027-01-03", "price_original": 516.0, "currency": "USD", "price_twd": 16553.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "okinawa", "itinerary_name": "4晚 來回 2027-01-07", "sail_date": "2027-01-07", "offers": [{"country_key": "belgium", "departure_port": "okinawa", "itinerary_name": "4晚 來回 2027-01-07", "sail_date": "2027-01-07", "price_original": 457.0, "currency": "EUR", "price_twd": 16721.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "okinawa", "itinerary_name": "4晚 來回 2027-01-07", "sail_date": "2027-01-07", "price_original": 409.0, "currency": "GBP", "price_twd": 17495.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "usa", "departure_port": "okinawa", "itinerary_name": "4晚 來回 2027-01-07", "sail_date": "2027-01-07", "price_original": 549.0, "currency": "USD", "price_twd": 17611.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "belgium"}, {"departure_port": "okinawa", "itinerary_name": "6晚 單程→Tokyo 2027-01-11", "sail_date": "2027-01-11", "offers": [{"country_key": "usa", "departure_port": "okinawa", "itinerary_name": "6晚 單程→Tokyo 2027-01-11", "sail_date": "2027-01-11", "price_original": 569.0, "currency": "USD", "price_twd": 18253.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "okinawa", "itinerary_name": "6晚 單程→Tokyo 2027-01-11", "sail_date": "2027-01-11", "price_original": 521.0, "currency": "EUR", "price_twd": 19063.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "okinawa", "itinerary_name": "6晚 單程→Tokyo 2027-01-11", "sail_date": "2027-01-11", "price_original": 449.0, "currency": "GBP", "price_twd": 19206.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=NAH&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "tokyo", "itinerary_name": "4晚 單程→Keelung 2026-11-21", "sail_date": "2026-11-21", "offers": [{"country_key": "usa", "departure_port": "tokyo", "itinerary_name": "4晚 單程→Keelung 2026-11-21", "sail_date": "2026-11-21", "price_original": 409.0, "currency": "USD", "price_twd": 13120.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "tokyo", "itinerary_name": "4晚 單程→Keelung 2026-11-21", "sail_date": "2026-11-21", "price_original": 483.0, "currency": "EUR", "price_twd": 17672.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "tokyo", "itinerary_name": "4晚 單程→Keelung Taipei 2026-11-21", "sail_date": "2026-11-21", "offers": [{"country_key": "austria", "departure_port": "tokyo", "itinerary_name": "4晚 單程→Keelung Taipei 2026-11-21", "sail_date": "2026-11-21", "price_original": 569.0, "currency": "EUR", "price_twd": 20819.0, "source_url": "https://www.msccruises.at/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "austria"}, {"departure_port": "tokyo", "itinerary_name": "3晚 單程→Shanghai 2027-01-17", "sail_date": "2027-01-17", "offers": [{"country_key": "belgium", "departure_port": "tokyo", "itinerary_name": "3晚 單程→Shanghai 2027-01-17", "sail_date": "2027-01-17", "price_original": 240.0, "currency": "EUR", "price_twd": 8781.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "tokyo", "itinerary_name": "3晚 單程→Shanghai 2027-01-17", "sail_date": "2027-01-17", "price_original": 209.0, "currency": "GBP", "price_twd": 8940.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "usa", "departure_port": "tokyo", "itinerary_name": "3晚 單程→Shanghai 2027-01-17", "sail_date": "2027-01-17", "price_original": 301.0, "currency": "USD", "price_twd": 9656.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "belgium"}, {"departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-03-27", "sail_date": "2027-03-27", "offers": [{"country_key": "belgium", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-03-27", "sail_date": "2027-03-27", "price_original": 354.0, "currency": "EUR", "price_twd": 12952.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "usa", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-03-27", "sail_date": "2027-03-27", "price_original": 799.0, "currency": "USD", "price_twd": 25631.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-03-27", "sail_date": "2027-03-27", "price_original": 619.0, "currency": "GBP", "price_twd": 26478.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-03-27", "sail_date": "2027-03-27", "price_original": 754.0, "currency": "EUR", "price_twd": 27588.0, "source_url": "https://www.msccruises.at/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "belgium"}, {"departure_port": "tokyo", "itinerary_name": "10晚 來回 2027-04-10", "sail_date": "2027-04-10", "offers": [{"country_key": "uk", "departure_port": "tokyo", "itinerary_name": "10晚 來回 2027-04-10", "sail_date": "2027-04-10", "price_original": 1499.0, "currency": "GBP", "price_twd": 64121.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "tokyo", "itinerary_name": "10晚 來回 2027-04-10", "sail_date": "2027-04-10", "price_original": 1769.0, "currency": "EUR", "price_twd": 64726.0, "source_url": "https://www.msccruises.at/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "tokyo", "itinerary_name": "10晚 來回 2027-04-10", "sail_date": "2027-04-10", "price_original": 1775.0, "currency": "EUR", "price_twd": 64945.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "uk"}, {"departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-04-29", "sail_date": "2027-04-29", "offers": [{"country_key": "usa", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-04-29", "sail_date": "2027-04-29", "price_original": 1019.0, "currency": "USD", "price_twd": 32688.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-04-29", "sail_date": "2027-04-29", "price_original": 794.0, "currency": "GBP", "price_twd": 33964.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-04-29", "sail_date": "2027-04-29", "price_original": 954.0, "currency": "EUR", "price_twd": 34906.0, "source_url": "https://www.msccruises.at/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-04-29", "sail_date": "2027-04-29", "price_original": 954.0, "currency": "EUR", "price_twd": 34906.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "tokyo", "itinerary_name": "13晚 來回 2027-05-04", "sail_date": "2027-05-04", "offers": [{"country_key": "belgium", "departure_port": "tokyo", "itinerary_name": "13晚 來回 2027-05-04", "sail_date": "2027-05-04", "price_original": 2216.0, "currency": "EUR", "price_twd": 81081.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "belgium"}, {"departure_port": "tokyo", "itinerary_name": "6晚 來回 2027-05-17", "sail_date": "2027-05-17", "offers": [{"country_key": "usa", "departure_port": "tokyo", "itinerary_name": "6晚 來回 2027-05-17", "sail_date": "2027-05-17", "price_original": 909.0, "currency": "USD", "price_twd": 29160.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "tokyo", "itinerary_name": "6晚 來回 2027-05-17", "sail_date": "2027-05-17", "price_original": 729.0, "currency": "GBP", "price_twd": 31183.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "tokyo", "itinerary_name": "6晚 來回 2027-05-17", "sail_date": "2027-05-17", "price_original": 869.0, "currency": "EUR", "price_twd": 31796.0, "source_url": "https://www.msccruises.at/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "tokyo", "itinerary_name": "6晚 來回 2027-05-17", "sail_date": "2027-05-17", "price_original": 869.0, "currency": "EUR", "price_twd": 31796.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "tokyo", "itinerary_name": "4晚 單程→Incheon 2027-06-10", "sail_date": "2027-06-10", "offers": [{"country_key": "usa", "departure_port": "tokyo", "itinerary_name": "4晚 單程→Incheon 2027-06-10", "sail_date": "2027-06-10", "price_original": 316.0, "currency": "USD", "price_twd": 10137.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "tokyo", "itinerary_name": "4晚 單程→Incheon 2027-06-10", "sail_date": "2027-06-10", "price_original": 319.0, "currency": "EUR", "price_twd": 11672.0, "source_url": "https://www.msccruises.at/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "belgium", "departure_port": "tokyo", "itinerary_name": "4晚 單程→Incheon 2027-06-10", "sail_date": "2027-06-10", "price_original": 319.0, "currency": "EUR", "price_twd": 11672.0, "source_url": "https://www.msccruises.be/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "tokyo", "itinerary_name": "4晚 單程→Incheon 2027-06-10", "sail_date": "2027-06-10", "price_original": 279.0, "currency": "GBP", "price_twd": 11934.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-12-07", "sail_date": "2027-12-07", "offers": [{"country_key": "usa", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-12-07", "sail_date": "2027-12-07", "price_original": 898.0, "currency": "USD", "price_twd": 28807.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-12-07", "sail_date": "2027-12-07", "price_original": 687.0, "currency": "GBP", "price_twd": 29387.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "tokyo", "itinerary_name": "5晚 來回 2027-12-07", "sail_date": "2027-12-07", "price_original": 829.0, "currency": "EUR", "price_twd": 30332.0, "source_url": "https://www.msccruises.at/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}, {"departure_port": "tokyo", "itinerary_name": "9晚 來回 2028-04-11", "sail_date": "2028-04-11", "offers": [{"country_key": "usa", "departure_port": "tokyo", "itinerary_name": "9晚 來回 2028-04-11", "sail_date": "2028-04-11", "price_original": 1799.0, "currency": "USD", "price_twd": 57710.0, "source_url": "https://www.msccruisesusa.com/Search%20Result?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "uk", "departure_port": "tokyo", "itinerary_name": "9晚 來回 2028-04-11", "sail_date": "2028-04-11", "price_original": 1374.0, "currency": "GBP", "price_twd": 58774.0, "source_url": "https://www.msccruises.co.uk/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}, {"country_key": "austria", "departure_port": "tokyo", "itinerary_name": "9晚 來回 2028-04-11", "sail_date": "2028-04-11", "price_original": 1624.0, "currency": "EUR", "price_twd": 59420.0, "source_url": "https://www.msccruises.at/search?embkPort=TYO&noCache=true", "scraped_at": "2026-07-07T09:42:30.661473+00:00"}], "cheapest_country": "usa"}], "failed_sites": [], "port_order": ["taiwan", "okinawa", "tokyo"], "port_labels": {"taiwan": "台灣（基隆）", "okinawa": "沖繩（那霸）", "tokyo": "東京（含橫濱）"}, "country_labels": {"usa": {"name": "美國", "flag": "🇺🇸"}, "belgium": {"name": "比利時", "flag": "🇧🇪"}, "uk": {"name": "英國", "flag": "🇬🇧"}, "austria": {"name": "奧地利", "flag": "🇦🇹"}}};
+const PL = DATA.port_labels, CL = DATA.country_labels;
+
+/* ---- 前置整理：每組計算最低價與可省金額 ---- */
+DATA.groups.forEach(g => {
+  g.minTwd = Math.min(...g.offers.map(o => o.price_twd));
+  g.maxTwd = Math.max(...g.offers.map(o => o.price_twd));
+  g.saving = g.offers.length > 1 ? g.maxTwd - g.minTwd : 0;
+});
+
+/* ---- 頁首與統計 ---- */
+document.getElementById('meta').textContent =
+  '資料更新：' + new Date(DATA.generated_at).toLocaleString('zh-TW');
+
+const totalGroups = DATA.groups.length;
+const cheapest = DATA.groups.reduce((a, b) => (!a || b.minTwd < a.minTwd) ? b : a, null);
+const maxSave = DATA.groups.reduce((m, g) => Math.max(m, g.saving), 0);
+
+const statDefs = [
+  { num: totalGroups, lbl: '追蹤中的航次', fmt: v => Math.round(v) },
+  { num: cheapest ? cheapest.minTwd : 0, lbl: '目前最低價（NT$）', fmt: v => 'NT$' + Math.round(v).toLocaleString() },
+  { num: maxSave, lbl: '單一航次最大價差（NT$）', fmt: v => 'NT$' + Math.round(v).toLocaleString() },
+];
+const statsEl = document.getElementById('stats');
+statDefs.forEach((s, i) => {
+  const d = document.createElement('div');
+  d.className = 'stat'; d.style.animationDelay = (i * 0.08) + 's';
+  d.innerHTML = '<div class="num" data-target="' + s.num + '">0</div><div class="lbl">' + s.lbl + '</div>';
+  d._fmt = s.fmt;
+  statsEl.appendChild(d);
+});
+/* 數字滾動動畫 */
+statsEl.querySelectorAll('.stat').forEach(st => {
+  const el = st.querySelector('.num'), target = +el.dataset.target, fmt = st._fmt;
+  const t0 = performance.now(), dur = 900;
+  (function tick(t) {
+    const p = Math.min((t - t0) / dur, 1);
+    el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(tick);
+  })(t0);
+});
+
+/* ---- 失敗國家提示 ---- */
+if (DATA.failed_sites && DATA.failed_sites.length) {
+  const box = document.getElementById('failedBox');
+  box.style.display = 'block';
+  box.innerHTML = '<b>⚠ 今日抓取失敗：</b>' + DATA.failed_sites.map(f => {
+    const c = CL[f.country_key] || { name: f.country_key, flag: '' };
+    return c.flag + ' ' + c.name;
+  }).join('、') + '（請自行前往該國官網手動查價）';
+}
+
+/* ---- 港口分頁 ---- */
+let curPort = 'all', curSort = 'date';
+const tabsEl = document.getElementById('tabs');
+const ports = ['all', ...DATA.port_order.filter(p => DATA.groups.some(g => g.departure_port === p))];
+ports.forEach(p => {
+  const cnt = p === 'all' ? DATA.groups.length : DATA.groups.filter(g => g.departure_port === p).length;
+  const b = document.createElement('div');
+  b.className = 'tab' + (p === curPort ? ' active' : '');
+  b.dataset.port = p;
+  b.innerHTML = (p === 'all' ? '全部' : PL[p] || p) + '<span class="cnt">' + cnt + '</span>';
+  b.onclick = () => { curPort = p; tabsEl.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.port === p)); render(); };
+  tabsEl.appendChild(b);
+});
+
+/* ---- 排序 ---- */
+document.querySelectorAll('.sortbtn').forEach(b => {
+  b.onclick = () => {
+    curSort = b.dataset.sort;
+    document.querySelectorAll('.sortbtn').forEach(x => x.classList.toggle('active', x === b));
+    render();
+  };
+});
+
+/* ---- 卡片渲染 ---- */
+const gridEl = document.getElementById('grid');
+function render() {
+  let list = curPort === 'all' ? [...DATA.groups] : DATA.groups.filter(g => g.departure_port === curPort);
+
+  const portIdx = p => { const i = DATA.port_order.indexOf(p); return i < 0 ? 99 : i; };
+  if (curSort === 'date')   list.sort((a, b) => portIdx(a.departure_port) - portIdx(b.departure_port) || String(a.sail_date || '9999').localeCompare(String(b.sail_date || '9999')));
+  if (curSort === 'price')  list.sort((a, b) => a.minTwd - b.minTwd);
+  if (curSort === 'save')   list.sort((a, b) => b.saving - a.saving);
+
+  gridEl.innerHTML = '';
+  document.getElementById('empty').style.display = list.length ? 'none' : 'block';
+
+  list.forEach((g, idx) => {
+    const card = document.createElement('div');
+    card.className = 'cruise';
+    const best = g.offers[0];
+    const bc = CL[best.country_key] || { name: best.country_key, flag: '' };
+
+    let offersHtml = '';
+    g.offers.forEach(o => {
+      const c = CL[o.country_key] || { name: o.country_key, flag: '' };
+      const isCheap = o.country_key === g.cheapest_country;
+      const pct = Math.round(o.price_twd / g.maxTwd * 100);
+      const diff = o.price_twd - g.minTwd;
+      offersHtml += `
+        <div class="offer ${isCheap ? 'cheapest' : ''}">
+          <div class="bar" data-w="${pct}%"></div>
+          <div class="row">
+            <span class="country">${isCheap ? '<span class="star">★</span>' : ''}<span class="flag">${c.flag}</span>${c.name}</span>
+            <span>
+              <span class="twd">NT$${Math.round(o.price_twd).toLocaleString()}</span>
+              <span class="orig">${o.price_original.toLocaleString()} ${o.currency}</span>
+              ${diff > 0 ? '<span class="diff">+' + Math.round(diff).toLocaleString() + '</span>' : ''}
+            </span>
+          </div>
+        </div>`;
+    });
+
+    let linksHtml = g.offers.map(o => {
+      const c = CL[o.country_key] || { name: o.country_key, flag: '' };
+      return `<a href="${o.source_url}" target="_blank" onclick="event.stopPropagation()">${c.flag} 到${c.name}官網訂購</a>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="top">
+        <div>
+          <span class="port-badge ${g.departure_port}">${PL[g.departure_port] || g.departure_port} 出發</span>
+        </div>
+        ${g.saving > 0 ? '<span class="save-badge">可省 NT$' + Math.round(g.saving).toLocaleString() + '</span>' : ''}
+      </div>
+      <h3>${g.itinerary_name}</h3>
+      <div class="date">出發日：${g.sail_date || '日期不明'}</div>
+      <div class="best">
+        <span class="price">NT$${Math.round(g.minTwd).toLocaleString()}</span>
+        <span class="who">最低價來自 ${bc.flag} ${bc.name}</span>
+      </div>
+      <div class="offers">${offersHtml}</div>
+      <div class="gobook">${linksHtml}</div>
+      <div class="hint">點擊卡片展開訂購連結 ▾</div>`;
+
+    card.onclick = () => card.classList.toggle('open');
+    gridEl.appendChild(card);
+
+    /* 進場動畫（交錯出現）與價格條動畫 */
+    setTimeout(() => {
+      card.classList.add('show');
+      card.querySelectorAll('.bar').forEach(b => { b.style.width = b.dataset.w; });
+    }, 60 * Math.min(idx, 10));
+  });
+}
+render();
+</script>
+</body>
+</html>
